@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Industrial Vehicle Packing</title>
+</head>
+<body>
+    <h1>工业车辆装箱系统</h1>
+    <form method="post">
+        <label>车辆长度: <input type="number" name="vehicle_length" value="200" required></label><br>
+        <label>车辆宽度: <input type="number" name="vehicle_width" value="100" required></label><br>
+        <label>车辆高度: <input type="number" name="vehicle_height" value="100" required></label><br>
+        <label>装箱策略:
+            <select name="strategy">
+                <option value="direct">直接装车厢</option>
+                <option value="pallet">先装拖板</option>
+            </select>
+        </label><br>
+        <input type="submit" value="生成布局">
+    </form>
+    {% if image_file %}
+        <h2>布局结果 (空间利用率: {{ utilization }}%)</h2>
+        <img src="{{ image_file }}" alt="Layout">
+    {% endif %}
+</body>
+</html>
