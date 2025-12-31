@@ -27,15 +27,13 @@ function packContainer(container, items){
             for(let i=0;i<spaces.length;i++){
                 const space = spaces[i];
                 if(canFit(rot,space)){
-                    const newPlacement={...rot, position:{x:space.x,y:space.y,z:space.z}, drag:item.drag, unit:item.unit, name:item.name};
+                    const newPlacement={...rot, position:{x:space.x,y:space.y,z:space.z}, isDrag:item.isDrag||false};
                     const newPlacements = [...placements,newPlacement];
                     const newSpaces = spaces.slice();
                     newSpaces.splice(i,1);
                     newSpaces.push({x:space.x+rot.width,y:space.y,z:space.z,width:space.width-rot.width,height:rot.height,depth:rot.depth});
                     newSpaces.push({x:space.x,y:space.y+rot.height,z:space.z,width:rot.width,height:space.height-rot.height,depth:rot.depth});
                     newSpaces.push({x:space.x,y:space.y,z:space.z+rot.depth,width:rot.width,height:rot.height,depth:space.depth-rot.depth});
-                    const remainingVolume = newSpaces.reduce((sum,s)=>sum+s.width*s.height*s.depth,0);
-                    if(volumeUsed+rot.width*rot.height*rot.depth+remainingVolume<bestVolume) continue;
                     recursivePlace(index+1,newSpaces,newPlacements,volumeUsed+rot.width*rot.height*rot.depth);
                 }
             }
@@ -46,24 +44,26 @@ function packContainer(container, items){
 }
 
 self.onmessage = function(e){
-    const {containers, items, mode} = e.data;
-    let allPlacements=[], totalVolumeUsed=0, totalContainerVolume=0;
-    containers.forEach(container=>{
-        let normalItems = items.filter(it=>!it.drag);
-        let dragItems = items.filter(it=>it.drag);
-        let orderedItems=[];
-        if(mode==='direct') orderedItems = [...items];
-        else if(mode==='drag_only') orderedItems = [...dragItems];
-        else if(mode==='drag_first') orderedItems = [...dragItems,...normalItems];
-        else if(mode==='custom') orderedItems = [...items]; // 自由搭配，可扩展
+    const {packingData} = e.data;
+    const {container, items, drags} = packingData;
 
-        orderedItems.sort((a,b)=>(b.width*b.height*b.depth)-(a.width*a.height*b.depth));
+    let allPlacements=[];
 
-        const {placements, volumeUsed} = packContainer(container,orderedItems);
-        allPlacements.push(placements);
-        totalVolumeUsed+=volumeUsed;
-        totalContainerVolume+=container.width*container.height*container.depth;
+    // 先装拖挂（内部装货物）
+    drags.forEach(d=>{
+        d.items.forEach(item=>item.isDrag=true);
+        const {placements, volumeUsed} = packContainer(d,d.items);
+        allPlacements.push({container:d, items:placements});
     });
+
+    // 再装剩余货物
+    items.forEach(item=>item.isDrag=false);
+    const {placements:itemsPlacement, volumeUsed:itemVolume} = packContainer(container,items);
+    allPlacements.push({container:container, items:itemsPlacement});
+
+    const totalVolumeUsed = allPlacements.reduce((sum,pl)=>sum+pl.items.reduce((s,i)=>s+i.width*i.height*i.depth,0),0);
+    const totalContainerVolume = allPlacements.reduce((sum,pl)=>sum+pl.container.width*pl.container.height*pl.container.depth,0);
     const utilization = totalVolumeUsed/totalContainerVolume;
-    self.postMessage({allPlacements, utilization});
+
+    self.postMessage({placements:allPlacements, utilization});
 }
