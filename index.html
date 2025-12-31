@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>工业级多车厢装箱系统</title>
+<title>工业级多车厢装箱系统（升级版）</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
-<h1>工业级多车厢装箱系统</h1>
+<h1>工业级多车厢装箱系统（升级版）</h1>
 
 <div class="controls">
     <label>单位:
@@ -21,7 +21,7 @@
     </label>
 
     <button id="addContainer">添加车厢</button>
-    <button id="addItem">添加货物</button>
+    <button id="addItem">添加货物/拖挂</button>
 
     <label>装箱模式:
         <select id="modeSelect">
@@ -44,6 +44,15 @@
         <h2>货物列表</h2>
         <ul id="itemsUl"></ul>
     </div>
+    <div class="dragList">
+        <h2>拖挂列表</h2>
+        <ul id="dragUl"></ul>
+    </div>
+</div>
+
+<div>
+<h3>推荐车厢：</h3>
+<span id="recommendedContainer"></span>
 </div>
 
 <div id="viewer" style="width:100%; height:600px; background:#eee;"></div>
