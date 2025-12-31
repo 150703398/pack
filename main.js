@@ -5,7 +5,8 @@ const itemsUl = document.getElementById('itemsUl');
 const dragUl = document.getElementById('dragUl');
 const selectContainer = document.getElementById('selectContainer');
 const utilizationSpan = document.getElementById('utilization');
-const worker = new Worker('packingWorker.js');
+
+let scene, camera, renderer, controls, dragControls, draggableObjects=[];
 
 // --- 保存 / 加载 ---
 function saveData(){
@@ -19,7 +20,9 @@ function loadData(){
     drags = JSON.parse(localStorage.getItem('drags') || '[]');
     renderContainers(); renderItems(); renderDrags(); updateContainerSelect();
 }
-window.onload = loadData;
+window.onload = ()=>{
+    loadData(); init3D();
+};
 
 // --- 添加车厢 ---
 document.getElementById('addContainer').onclick = ()=>{
@@ -103,6 +106,9 @@ function renderDrags(){
 
 // --- 开始装箱 ---
 document.getElementById('runPacking').onclick = ()=>{
+    draggableObjects.forEach(obj=>scene.remove(obj));
+    draggableObjects=[];
+
     const containerId = parseInt(selectContainer.value);
     const selectedContainer = containers.find(c => c.id === containerId);
     if(!selectedContainer){ alert("请选择车厢"); return; }
@@ -127,19 +133,10 @@ document.getElementById('runPacking').onclick = ()=>{
 
     if(selectedItems.length===0 && selectedDrags.length===0){ alert("请选择货物或拖挂"); return; }
 
-    worker.postMessage({packingData:{container:selectedContainer, items:selectedItems, drags:selectedDrags}});
-};
-
-// --- 接收 Worker ---
-worker.onmessage = function(e){
-    const {placements, utilization} = e.data;
-    if(!placements || placements.length===0){ alert("装箱失败"); return; }
-    utilizationSpan.textContent = `体积利用率: ${(utilization*100).toFixed(2)}%`;
-    render3D(placements);
+    render3D(selectedContainer, selectedItems, selectedDrags);
 };
 
 // --- Three.js 3D ---
-let scene,camera,renderer,controls;
 function init3D(){
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75,window.innerWidth/600,0.1,10000);
@@ -158,38 +155,55 @@ function init3D(){
     controls.target.set(10,10,10);
     controls.update();
 }
-function render3D(allPlacements){
-    // 保留光源和网格
+
+// --- 渲染容器 + 拖挂 + 货物 ---
+function render3D(container, itemList, dragList){
     const keepObjects = scene.children.filter(obj => obj.type==='AmbientLight'||obj.type==='DirectionalLight'||obj.type==='GridHelper');
     scene.children = keepObjects;
+    draggableObjects=[];
 
-    let maxX=0,maxY=0,maxZ=0;
+    // 车厢边框
+    const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(container.width,container.height,container.depth)), new THREE.LineBasicMaterial({color:0x000000}));
+    wire.position.set(container.width/2,container.height/2,container.depth/2); scene.add(wire);
 
-    allPlacements.forEach(placement=>{
-        const c = placement.container;
-
-        // 容器边框
-        const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(c.width,c.height,c.depth)), new THREE.LineBasicMaterial({color:0x000000}));
-        wire.position.set(c.width/2,c.height/2,c.depth/2); scene.add(wire);
-
-        placement.items.forEach(item=>{
-            if(!item.position) item.position={x:0,y:0,z:0};
-            const geometry = new THREE.BoxGeometry(item.width,item.height,item.depth);
-            const material = new THREE.MeshPhongMaterial({color:item.isDrag?0xff5555:Math.random()*0xffffff});
-            const cube = new THREE.Mesh(geometry,material);
-            cube.position.set(item.position.x + item.width/2, item.position.y + item.height/2, item.position.z + item.depth/2);
-            scene.add(cube);
-
-            maxX = Math.max(maxX, item.position.x + item.width);
-            maxY = Math.max(maxY, item.position.y + item.height);
-            maxZ = Math.max(maxZ, item.position.z + item.depth);
-        });
+    // 拖挂
+    dragList.forEach(d=>{
+        const dragMesh = new THREE.Mesh(new THREE.BoxGeometry(d.width,d.height,d.depth), new THREE.MeshPhongMaterial({color:0xff5555,transparent:true,opacity:0.5}));
+        dragMesh.position.set(0,d.height/2,0);
+        scene.add(dragMesh); draggableObjects.push(dragMesh);
     });
 
-    // 摄像机自适配
-    camera.position.set(maxX*1.5 || 10, maxY*1.5 || 10, maxZ*1.5 || 10);
-    controls.target.set(maxX/2 || 0, maxY/2 || 0, maxZ/2 || 0);
-    controls.update();
+    // 货物
+    let x=0,z=0,maxRowDepth=0;
+    itemList.forEach(item=>{
+        if(x+item.width>container.width){ x=0; z+=maxRowDepth; maxRowDepth=0; }
+        if(z+item.depth>container.depth){ x=0; z=0; } // 简单回绕
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(item.width,item.height,item.depth), new THREE.MeshPhongMaterial({color:Math.random()*0xffffff}));
+        mesh.position.set(x+item.width/2,item.height/2,z+item.depth/2);
+        scene.add(mesh); draggableObjects.push(mesh);
+        x += item.width;
+        if(item.depth>maxRowDepth) maxRowDepth=item.depth;
+    });
+
+    // 拖拽控制
+    if(dragControls) dragControls.deactivate();
+    dragControls = new THREE.DragControls(draggableObjects,camera,renderer.domElement);
+    dragControls.addEventListener('dragstart', function(event){ controls.enabled=false; });
+    dragControls.addEventListener('dragend', function(event){ controls.enabled=true; updateUtilization(container); });
+
+    updateUtilization(container);
     renderer.render(scene,camera);
 }
-init3D();
+
+// --- 计算利用率 ---
+function updateUtilization(container){
+    let volumeUsed=0;
+    draggableObjects.forEach(obj=>{
+        const bbox = new THREE.Box3().setFromObject(obj);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        volumeUsed += size.x*size.y*size.z;
+    });
+    const totalVolume = container.width*container.height*container.depth;
+    utilizationSpan.textContent = `体积利用率: ${(volumeUsed/totalVolume*100).toFixed(2)}%`;
+}
