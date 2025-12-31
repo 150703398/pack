@@ -10,16 +10,37 @@ const useDragCheckbox = document.getElementById('useDrag');
 
 const worker = new Worker('packingWorker.js');
 
-// --- 添加车厢 ---
+// --- 保存 / 加载数据 ---
+function saveData(){
+    localStorage.setItem('containers', JSON.stringify(containers));
+    localStorage.setItem('items', JSON.stringify(items));
+    localStorage.setItem('drags', JSON.stringify(drags));
+}
+function loadData(){
+    containers = JSON.parse(localStorage.getItem('containers') || '[]');
+    items = JSON.parse(localStorage.getItem('items') || '[]');
+    drags = JSON.parse(localStorage.getItem('drags') || '[]');
+    renderContainers();
+    renderItems();
+    renderDrags();
+    updateContainerSelect();
+}
+window.onload = loadData;
+
+// --- 添加车厢（先输入名称） ---
 document.getElementById('addContainer').onclick = ()=>{
+    const name = prompt("车厢名称","车厢X");
+    if(!name) return;
+
     const unit = unitSelect.value;
     const w = parseFloat(prompt(`车厢宽度 (${unit})`,"10"));
     const h = parseFloat(prompt(`车厢高度 (${unit})`,"5"));
     const d = parseFloat(prompt(`车厢深度 (${unit})`,"5"));
-    const name = prompt("车厢名称","车厢X");
+
     if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
         const id = Date.now();
         containers.push({id,name,width:w,height:h,depth:d,unit});
+        saveData();
         renderContainers();
         updateContainerSelect();
     }
@@ -33,7 +54,6 @@ function renderContainers(){
         containersUl.appendChild(li);
     });
 }
-
 function updateContainerSelect(){
     selectContainer.innerHTML='';
     containers.forEach(c=>{
@@ -54,24 +74,10 @@ document.getElementById('addItem').onclick = ()=>{
     if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
         const id = Date.now();
         items.push({id,name,width:w,height:h,depth:d,unit});
+        saveData();
         renderItems();
     }
 };
-
-// --- 添加拖挂 ---
-document.getElementById('addDrag').onclick = ()=>{
-    const unit = unitSelect.value;
-    const name = prompt("拖挂名称","拖挂X");
-    const w = parseFloat(prompt(`宽度 (${unit})`,"2"));
-    const h = parseFloat(prompt(`高度 (${unit})`,"1"));
-    const d = parseFloat(prompt(`深度 (${unit})`,"1"));
-    if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
-        const id = Date.now();
-        drags.push({id,name,width:w,height:h,depth:d,unit,items:[]});
-        renderDrags();
-    }
-};
-
 function renderItems(){
     itemsUl.innerHTML='';
     items.forEach(item=>{
@@ -88,6 +94,20 @@ function renderItems(){
     });
 }
 
+// --- 添加拖挂 ---
+document.getElementById('addDrag').onclick = ()=>{
+    const unit = unitSelect.value;
+    const name = prompt("拖挂名称","拖挂X");
+    const w = parseFloat(prompt(`宽度 (${unit})`,"2"));
+    const h = parseFloat(prompt(`高度 (${unit})`,"1"));
+    const d = parseFloat(prompt(`深度 (${unit})`,"1"));
+    if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
+        const id = Date.now();
+        drags.push({id,name,width:w,height:h,depth:d,unit,items:[]});
+        saveData();
+        renderDrags();
+    }
+};
 function renderDrags(){
     dragUl.innerHTML='';
     drags.forEach(d=>{
@@ -101,12 +121,9 @@ function renderDrags(){
 document.getElementById('runPacking').onclick = ()=>{
     const containerId = parseInt(selectContainer.value);
     const selectedContainer = containers.find(c=>c.id===containerId);
-    if(!selectedContainer){
-        alert("请选择车厢");
-        return;
-    }
+    if(!selectedContainer){ alert("请选择车厢"); return; }
 
-    // 获取选中的货物数量
+    // 获取货物数量
     let selectedItems = [];
     document.querySelectorAll('#itemsUl input[type=number]').forEach(input=>{
         const count = parseInt(input.value);
@@ -117,36 +134,28 @@ document.getElementById('runPacking').onclick = ()=>{
         }
     });
 
-    // 是否使用拖挂
     const useDrag = useDragCheckbox.checked;
     let selectedDrags = [];
     if(useDrag){
-        // 拖挂可以装货物
+        // 拖挂装货物
         selectedDrags = drags.map(d=>{
-            // 每个拖挂分配货物 (简单均分)
             let assignedItems = selectedItems.splice(0, Math.ceil(selectedItems.length/drags.length));
             return {...d, items:assignedItems};
         });
     }
 
-    // 装箱数据
-    const packingData = {
-        container: selectedContainer,
-        items: selectedItems,
-        drags: selectedDrags
-    };
-
+    const packingData = {container:selectedContainer, items:selectedItems, drags:selectedDrags};
     worker.postMessage({packingData});
 };
 
-// --- 接收结果 ---
+// --- 接收 Worker 结果 ---
 worker.onmessage = function(e){
     const {placements, utilization} = e.data;
     utilizationSpan.textContent = `体积利用率: ${(utilization*100).toFixed(2)}%`;
     render3D(placements);
 };
 
-// --- Three.js 3D 渲染 ---
+// --- Three.js 3D ---
 let scene, camera, renderer, controls;
 function init3D(){
     scene = new THREE.Scene();
@@ -169,7 +178,6 @@ function init3D(){
 }
 function render3D(allPlacements){
     scene.children = scene.children.filter(obj=>obj.type!=='Mesh');
-
     allPlacements.forEach(placement=>{
         const c = placement.container;
         const containerGeo = new THREE.BoxGeometry(c.width,c.height,c.depth);
@@ -188,7 +196,6 @@ function render3D(allPlacements){
             scene.add(cube);
         });
     });
-
     renderer.render(scene,camera);
 }
 init3D();
