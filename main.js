@@ -124,9 +124,9 @@ function renderDrags(){
 
 // --- 开始装箱 ---
 document.getElementById('runPacking').onclick = ()=>{
-    const selectedContainerIds = Array.from(selectContainer.selectedOptions).map(opt=>parseInt(opt.value));
-    if(selectedContainerIds.length===0){ alert("请选择车厢"); return; }
-    const selectedContainers = containers.filter(c=>selectedContainerIds.includes(c.id));
+    const containerId = parseInt(selectContainer.value);
+    const selectedContainer = containers.find(c => c.id === containerId);
+    if(!selectedContainer){ alert("请选择车厢"); return; }
 
     let selectedItems=[];
     document.querySelectorAll('#itemsUl li').forEach(li=>{
@@ -136,7 +136,7 @@ document.getElementById('runPacking').onclick = ()=>{
             const count=parseInt(input.value);
             if(count>0){
                 const id=parseInt(checkbox.dataset.id);
-                const item = items.find(i=>i.id===id);
+                const item = items.find(i => i.id === id);
                 for(let i=0;i<count;i++) selectedItems.push({...item});
             }
         }
@@ -147,7 +147,7 @@ document.getElementById('runPacking').onclick = ()=>{
         const checkbox = li.querySelector('input[type=checkbox]');
         if(checkbox.checked){
             const id=parseInt(checkbox.dataset.id);
-            const d = drags.find(dr=>dr.id===id);
+            const d = drags.find(dr => dr.id === id);
             selectedDrags.push({...d});
         }
     });
@@ -156,7 +156,9 @@ document.getElementById('runPacking').onclick = ()=>{
         alert("请选择货物或拖挂"); return;
     }
 
-    worker.postMessage({packingData:{containers:selectedContainers, items:selectedItems, drags:selectedDrags}});
+    worker.postMessage({
+        packingData:{container:selectedContainer, items:selectedItems, drags:selectedDrags}
+    });
 };
 
 // --- 接收 Worker 结果 ---
