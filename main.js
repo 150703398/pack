@@ -8,7 +8,7 @@ const utilizationSpan = document.getElementById('utilization');
 
 let scene, camera, renderer, controls, dragControls, draggableObjects=[];
 
-// --- 保存 / 加载 ---
+// ---------- 数据持久化 ----------
 function saveData(){
     localStorage.setItem('containers', JSON.stringify(containers));
     localStorage.setItem('items', JSON.stringify(items));
@@ -24,7 +24,7 @@ window.onload = ()=>{
     loadData(); init3D();
 };
 
-// --- 添加车厢 ---
+// ---------- 添加车厢 ----------
 document.getElementById('addContainer').onclick = ()=>{
     const name = prompt("车厢名称","车厢X"); if(!name) return;
     const unit = unitSelect.value;
@@ -54,7 +54,7 @@ function updateContainerSelect(){
     });
 }
 
-// --- 添加货物 ---
+// ---------- 添加货物 ----------
 document.getElementById('addItem').onclick = ()=>{
     const unit = unitSelect.value;
     const name = prompt("货物名称","货物X");
@@ -80,7 +80,7 @@ function renderItems(){
     });
 }
 
-// --- 添加拖挂 ---
+// ---------- 添加拖挂 ----------
 document.getElementById('addDrag').onclick = ()=>{
     const unit = unitSelect.value;
     const name = prompt("拖挂名称","拖挂X");
@@ -104,13 +104,13 @@ function renderDrags(){
     });
 }
 
-// --- 开始装箱 ---
+// ---------- 开始装箱 ----------
 document.getElementById('runPacking').onclick = ()=>{
     draggableObjects.forEach(obj=>scene.remove(obj));
     draggableObjects=[];
 
     const containerId = parseInt(selectContainer.value);
-    const selectedContainer = containers.find(c => c.id === containerId);
+    const selectedContainer = containers.find(c => c.id===containerId);
     if(!selectedContainer){ alert("请选择车厢"); return; }
 
     let selectedItems=[]; 
@@ -136,7 +136,7 @@ document.getElementById('runPacking').onclick = ()=>{
     render3D(selectedContainer, selectedItems, selectedDrags);
 };
 
-// --- Three.js 3D ---
+// ---------- Three.js ----------
 function init3D(){
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75,window.innerWidth/600,0.1,10000);
@@ -154,9 +154,15 @@ function init3D(){
     camera.position.set(20,20,20);
     controls.target.set(10,10,10);
     controls.update();
+
+    animate();
+}
+function animate(){
+    requestAnimationFrame(animate);
+    renderer.render(scene,camera);
 }
 
-// --- 渲染容器 + 拖挂 + 货物 ---
+// ---------- 渲染并启用拖拽 ----------
 function render3D(container, itemList, dragList){
     const keepObjects = scene.children.filter(obj => obj.type==='AmbientLight'||obj.type==='DirectionalLight'||obj.type==='GridHelper');
     scene.children = keepObjects;
@@ -191,17 +197,20 @@ function render3D(container, itemList, dragList){
     dragControls.addEventListener('dragstart', function(event){ controls.enabled=false; });
     dragControls.addEventListener('dragend', function(event){ controls.enabled=true; updateUtilization(container); });
 
+    // 摄像机自动调整
+    camera.position.set(container.width*1.5,container.height*1.5,container.depth*1.5);
+    controls.target.set(container.width/2,container.height/2,container.depth/2);
+    controls.update();
+
     updateUtilization(container);
-    renderer.render(scene,camera);
 }
 
-// --- 计算利用率 ---
+// ---------- 利用率 ----------
 function updateUtilization(container){
     let volumeUsed=0;
     draggableObjects.forEach(obj=>{
         const bbox = new THREE.Box3().setFromObject(obj);
-        const size = new THREE.Vector3();
-        bbox.getSize(size);
+        const size = new THREE.Vector3(); bbox.getSize(size);
         volumeUsed += size.x*size.y*size.z;
     });
     const totalVolume = container.width*container.height*container.depth;
