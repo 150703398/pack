@@ -6,7 +6,6 @@ const itemsUl = document.getElementById('itemsUl');
 const dragUl = document.getElementById('dragUl');
 const selectContainer = document.getElementById('selectContainer');
 const utilizationSpan = document.getElementById('utilization');
-const useDragCheckbox = document.getElementById('useDrag');
 
 const worker = new Worker('packingWorker.js');
 
@@ -27,16 +26,14 @@ function loadData(){
 }
 window.onload = loadData;
 
-// --- 添加车厢（先输入名称） ---
+// --- 添加车厢 ---
 document.getElementById('addContainer').onclick = ()=>{
     const name = prompt("车厢名称","车厢X");
     if(!name) return;
-
     const unit = unitSelect.value;
     const w = parseFloat(prompt(`车厢宽度 (${unit})`,"10"));
     const h = parseFloat(prompt(`车厢高度 (${unit})`,"5"));
     const d = parseFloat(prompt(`车厢深度 (${unit})`,"5"));
-
     if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
         const id = Date.now();
         containers.push({id,name,width:w,height:h,depth:d,unit});
@@ -54,6 +51,7 @@ function renderContainers(){
         containersUl.appendChild(li);
     });
 }
+
 function updateContainerSelect(){
     selectContainer.innerHTML='';
     containers.forEach(c=>{
@@ -78,17 +76,19 @@ document.getElementById('addItem').onclick = ()=>{
         renderItems();
     }
 };
+
 function renderItems(){
     itemsUl.innerHTML='';
     items.forEach(item=>{
         const li = document.createElement('li');
+        const checkbox = document.createElement('input');
+        checkbox.type='checkbox';
+        checkbox.dataset.id=item.id;
         const input = document.createElement('input');
-        input.type='number';
-        input.min=0;
-        input.value=1;
-        input.style.width='50px';
-        input.dataset.id = item.id;
-        li.textContent = `${item.name}: W:${item.width}${item.unit} H:${item.height}${item.unit} D:${item.depth}${item.unit} 数量: `;
+        input.type='number'; input.min=1; input.value=1; input.style.width='50px';
+        input.dataset.id=item.id;
+        li.appendChild(checkbox);
+        li.append(` ${item.name} W:${item.width}${item.unit} H:${item.height}${item.unit} D:${item.depth}${item.unit} 数量: `);
         li.appendChild(input);
         itemsUl.appendChild(li);
     });
@@ -108,44 +108,55 @@ document.getElementById('addDrag').onclick = ()=>{
         renderDrags();
     }
 };
+
 function renderDrags(){
     dragUl.innerHTML='';
     drags.forEach(d=>{
         const li = document.createElement('li');
-        li.textContent = `${d.name}: W:${d.width}${d.unit} H:${d.height}${d.unit} D:${d.depth}${d.unit}`;
+        const checkbox = document.createElement('input');
+        checkbox.type='checkbox';
+        checkbox.dataset.id=d.id;
+        li.appendChild(checkbox);
+        li.append(` ${d.name} W:${d.width}${d.unit} H:${d.height}${d.unit} D:${d.depth}${d.unit}`);
         dragUl.appendChild(li);
     });
 }
 
-// --- 装箱 ---
+// --- 开始装箱 ---
 document.getElementById('runPacking').onclick = ()=>{
-    const containerId = parseInt(selectContainer.value);
-    const selectedContainer = containers.find(c=>c.id===containerId);
-    if(!selectedContainer){ alert("请选择车厢"); return; }
+    const selectedContainerIds = Array.from(selectContainer.selectedOptions).map(opt=>parseInt(opt.value));
+    if(selectedContainerIds.length===0){ alert("请选择车厢"); return; }
+    const selectedContainers = containers.filter(c=>selectedContainerIds.includes(c.id));
 
-    // 获取货物数量
-    let selectedItems = [];
-    document.querySelectorAll('#itemsUl input[type=number]').forEach(input=>{
-        const count = parseInt(input.value);
-        if(count>0){
-            const id = parseInt(input.dataset.id);
-            const item = items.find(i=>i.id===id);
-            for(let i=0;i<count;i++) selectedItems.push({...item});
+    let selectedItems=[];
+    document.querySelectorAll('#itemsUl li').forEach(li=>{
+        const checkbox = li.querySelector('input[type=checkbox]');
+        const input = li.querySelector('input[type=number]');
+        if(checkbox.checked){
+            const count=parseInt(input.value);
+            if(count>0){
+                const id=parseInt(checkbox.dataset.id);
+                const item = items.find(i=>i.id===id);
+                for(let i=0;i<count;i++) selectedItems.push({...item});
+            }
         }
     });
 
-    const useDrag = useDragCheckbox.checked;
-    let selectedDrags = [];
-    if(useDrag){
-        // 拖挂装货物
-        selectedDrags = drags.map(d=>{
-            let assignedItems = selectedItems.splice(0, Math.ceil(selectedItems.length/drags.length));
-            return {...d, items:assignedItems};
-        });
+    let selectedDrags=[];
+    document.querySelectorAll('#dragUl li').forEach(li=>{
+        const checkbox = li.querySelector('input[type=checkbox]');
+        if(checkbox.checked){
+            const id=parseInt(checkbox.dataset.id);
+            const d = drags.find(dr=>dr.id===id);
+            selectedDrags.push({...d});
+        }
+    });
+
+    if(selectedItems.length===0 && selectedDrags.length===0){
+        alert("请选择货物或拖挂"); return;
     }
 
-    const packingData = {container:selectedContainer, items:selectedItems, drags:selectedDrags};
-    worker.postMessage({packingData});
+    worker.postMessage({packingData:{containers:selectedContainers, items:selectedItems, drags:selectedDrags}});
 };
 
 // --- 接收 Worker 结果 ---
@@ -156,10 +167,10 @@ worker.onmessage = function(e){
 };
 
 // --- Three.js 3D ---
-let scene, camera, renderer, controls;
+let scene,camera,renderer,controls;
 function init3D(){
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth/600, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(75,window.innerWidth/600,0.1,1000);
     renderer = new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(window.innerWidth,600);
     document.getElementById('viewer').appendChild(renderer.domElement);
@@ -181,10 +192,8 @@ function render3D(allPlacements){
     allPlacements.forEach(placement=>{
         const c = placement.container;
         const containerGeo = new THREE.BoxGeometry(c.width,c.height,c.depth);
-        const wire = new THREE.LineSegments(
-            new THREE.EdgesGeometry(containerGeo),
-            new THREE.LineBasicMaterial({color:0x000000})
-        );
+        const wire = new THREE.LineSegments(new THREE.EdgesGeometry(containerGeo),
+            new THREE.LineBasicMaterial({color:0x000000}));
         wire.position.set(c.width/2,c.height/2,c.depth/2);
         scene.add(wire);
 
