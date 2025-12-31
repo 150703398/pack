@@ -1,15 +1,13 @@
 let containers=[], items=[], drags=[];
-
 const unitSelect = document.getElementById('unitSelect');
 const containersUl = document.getElementById('containersUl');
 const itemsUl = document.getElementById('itemsUl');
 const dragUl = document.getElementById('dragUl');
 const selectContainer = document.getElementById('selectContainer');
 const utilizationSpan = document.getElementById('utilization');
-
 const worker = new Worker('packingWorker.js');
 
-// --- 保存 / 加载数据 ---
+// --- 保存 / 加载 ---
 function saveData(){
     localStorage.setItem('containers', JSON.stringify(containers));
     localStorage.setItem('items', JSON.stringify(items));
@@ -19,17 +17,13 @@ function loadData(){
     containers = JSON.parse(localStorage.getItem('containers') || '[]');
     items = JSON.parse(localStorage.getItem('items') || '[]');
     drags = JSON.parse(localStorage.getItem('drags') || '[]');
-    renderContainers();
-    renderItems();
-    renderDrags();
-    updateContainerSelect();
+    renderContainers(); renderItems(); renderDrags(); updateContainerSelect();
 }
 window.onload = loadData;
 
 // --- 添加车厢 ---
 document.getElementById('addContainer').onclick = ()=>{
-    const name = prompt("车厢名称","车厢X");
-    if(!name) return;
+    const name = prompt("车厢名称","车厢X"); if(!name) return;
     const unit = unitSelect.value;
     const w = parseFloat(prompt(`车厢宽度 (${unit})`,"10"));
     const h = parseFloat(prompt(`车厢高度 (${unit})`,"5"));
@@ -37,12 +31,9 @@ document.getElementById('addContainer').onclick = ()=>{
     if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
         const id = Date.now();
         containers.push({id,name,width:w,height:h,depth:d,unit});
-        saveData();
-        renderContainers();
-        updateContainerSelect();
+        saveData(); renderContainers(); updateContainerSelect();
     }
 };
-
 function renderContainers(){
     containersUl.innerHTML='';
     containers.forEach(c=>{
@@ -51,13 +42,11 @@ function renderContainers(){
         containersUl.appendChild(li);
     });
 }
-
 function updateContainerSelect(){
     selectContainer.innerHTML='';
     containers.forEach(c=>{
         const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = c.name;
+        opt.value = c.id; opt.textContent = c.name;
         selectContainer.appendChild(opt);
     });
 }
@@ -72,21 +61,15 @@ document.getElementById('addItem').onclick = ()=>{
     if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
         const id = Date.now();
         items.push({id,name,width:w,height:h,depth:d,unit});
-        saveData();
-        renderItems();
+        saveData(); renderItems();
     }
 };
-
 function renderItems(){
     itemsUl.innerHTML='';
     items.forEach(item=>{
         const li = document.createElement('li');
-        const checkbox = document.createElement('input');
-        checkbox.type='checkbox';
-        checkbox.dataset.id=item.id;
-        const input = document.createElement('input');
-        input.type='number'; input.min=1; input.value=1; input.style.width='50px';
-        input.dataset.id=item.id;
+        const checkbox = document.createElement('input'); checkbox.type='checkbox'; checkbox.dataset.id=item.id;
+        const input = document.createElement('input'); input.type='number'; input.min=1; input.value=1; input.style.width='50px'; input.dataset.id=item.id;
         li.appendChild(checkbox);
         li.append(` ${item.name} W:${item.width}${item.unit} H:${item.height}${item.unit} D:${item.depth}${item.unit} 数量: `);
         li.appendChild(input);
@@ -104,18 +87,14 @@ document.getElementById('addDrag').onclick = ()=>{
     if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
         const id = Date.now();
         drags.push({id,name,width:w,height:h,depth:d,unit,items:[]});
-        saveData();
-        renderDrags();
+        saveData(); renderDrags();
     }
 };
-
 function renderDrags(){
     dragUl.innerHTML='';
     drags.forEach(d=>{
         const li = document.createElement('li');
-        const checkbox = document.createElement('input');
-        checkbox.type='checkbox';
-        checkbox.dataset.id=d.id;
+        const checkbox = document.createElement('input'); checkbox.type='checkbox'; checkbox.dataset.id=d.id;
         li.appendChild(checkbox);
         li.append(` ${d.name} W:${d.width}${d.unit} H:${d.height}${d.unit} D:${d.depth}${d.unit}`);
         dragUl.appendChild(li);
@@ -128,40 +107,30 @@ document.getElementById('runPacking').onclick = ()=>{
     const selectedContainer = containers.find(c => c.id === containerId);
     if(!selectedContainer){ alert("请选择车厢"); return; }
 
-    let selectedItems=[];
+    let selectedItems=[]; 
     document.querySelectorAll('#itemsUl li').forEach(li=>{
         const checkbox = li.querySelector('input[type=checkbox]');
         const input = li.querySelector('input[type=number]');
         if(checkbox.checked){
-            const count=parseInt(input.value);
-            if(count>0){
-                const id=parseInt(checkbox.dataset.id);
-                const item = items.find(i => i.id === id);
+            const count=parseInt(input.value); if(count>0){
+                const id=parseInt(checkbox.dataset.id); const item = items.find(i=>i.id===id);
                 for(let i=0;i<count;i++) selectedItems.push({...item});
             }
         }
     });
 
-    let selectedDrags=[];
+    let selectedDrags=[]; 
     document.querySelectorAll('#dragUl li').forEach(li=>{
         const checkbox = li.querySelector('input[type=checkbox]');
-        if(checkbox.checked){
-            const id=parseInt(checkbox.dataset.id);
-            const d = drags.find(dr => dr.id === id);
-            selectedDrags.push({...d});
-        }
+        if(checkbox.checked){ const id=parseInt(checkbox.dataset.id); const d = drags.find(dr=>dr.id===id); selectedDrags.push({...d}); }
     });
 
-    if(selectedItems.length===0 && selectedDrags.length===0){
-        alert("请选择货物或拖挂"); return;
-    }
+    if(selectedItems.length===0 && selectedDrags.length===0){ alert("请选择货物或拖挂"); return; }
 
-    worker.postMessage({
-        packingData:{container:selectedContainer, items:selectedItems, drags:selectedDrags}
-    });
+    worker.postMessage({packingData:{container:selectedContainer, items:selectedItems, drags:selectedDrags}});
 };
 
-// --- 接收 Worker 结果 ---
+// --- 接收 Worker ---
 worker.onmessage = function(e){
     const {placements, utilization} = e.data;
     if(!placements || placements.length===0){ alert("装箱失败"); return; }
@@ -173,35 +142,28 @@ worker.onmessage = function(e){
 let scene,camera,renderer,controls;
 function init3D(){
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75,window.innerWidth/600,0.1,1000);
+    camera = new THREE.PerspectiveCamera(75,window.innerWidth/600,0.1,10000);
     renderer = new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(window.innerWidth,600);
     document.getElementById('viewer').appendChild(renderer.domElement);
 
-    camera.position.set(40,25,40);
     controls = new THREE.OrbitControls(camera,renderer.domElement);
     controls.update();
 
-    const ambient = new THREE.AmbientLight(0x404040);
-    scene.add(ambient);
-    const light = new THREE.DirectionalLight(0xffffff,1);
-    light.position.set(30,40,30);
-    scene.add(light);
-
-    const grid = new THREE.GridHelper(200,200);
-    scene.add(grid);
+    const ambient = new THREE.AmbientLight(0xffffff,0.8); scene.add(ambient);
+    const light = new THREE.DirectionalLight(0xffffff,1); light.position.set(50,50,50); scene.add(light);
+    const grid = new THREE.GridHelper(200,200); scene.add(grid);
 }
 function render3D(allPlacements){
-    const keepObjects = scene.children.filter(obj => obj.type !== 'Mesh');
+    const keepObjects = scene.children.filter(obj => obj.type==='AmbientLight'||obj.type==='DirectionalLight'||obj.type==='GridHelper');
     scene.children = keepObjects;
+
+    let maxX=0,maxY=0,maxZ=0;
 
     allPlacements.forEach(placement=>{
         const c = placement.container;
-        const containerGeo = new THREE.BoxGeometry(c.width,c.height,c.depth);
-        const wire = new THREE.LineSegments(new THREE.EdgesGeometry(containerGeo),
-            new THREE.LineBasicMaterial({color:0x000000}));
-        wire.position.set(c.width/2,c.height/2,c.depth/2);
-        scene.add(wire);
+        const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(c.width,c.height,c.depth)), new THREE.LineBasicMaterial({color:0x000000}));
+        wire.position.set(c.width/2,c.height/2,c.depth/2); scene.add(wire);
 
         placement.items.forEach(item=>{
             if(!item.position) return;
@@ -210,8 +172,16 @@ function render3D(allPlacements){
             const cube = new THREE.Mesh(geometry,material);
             cube.position.set(item.position.x+item.width/2,item.position.y+item.height/2,item.position.z+item.depth/2);
             scene.add(cube);
+
+            maxX = Math.max(maxX, item.position.x + item.width);
+            maxY = Math.max(maxY, item.position.y + item.height);
+            maxZ = Math.max(maxZ, item.position.z + item.depth);
         });
     });
+
+    camera.position.set(maxX*1.5, maxY*1.5, maxZ*1.5);
+    controls.target.set(maxX/2,maxY/2,maxZ/2); controls.update();
+
     renderer.render(scene,camera);
 }
 init3D();
