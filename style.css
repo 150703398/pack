@@ -2,6 +2,6 @@ body { font-family: Arial, sans-serif; margin: 10px; }
 .controls { margin-bottom: 10px; }
 .controls label { margin-right: 10px; }
 .lists { display: flex; gap: 30px; margin-bottom: 10px; }
-.lists ul { list-style: none; padding: 0; }
+.lists ul { list-style: none; padding: 0; max-height:200px; overflow:auto;}
 button { margin-left: 5px; }
 #utilization { margin-left: 20px; font-weight: bold; }
