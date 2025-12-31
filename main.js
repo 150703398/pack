@@ -150,11 +150,16 @@ function init3D(){
     controls = new THREE.OrbitControls(camera,renderer.domElement);
     controls.update();
 
-    const ambient = new THREE.AmbientLight(0xffffff,0.8); scene.add(ambient);
+    const ambient = new THREE.AmbientLight(0xffffff,0.9); scene.add(ambient);
     const light = new THREE.DirectionalLight(0xffffff,1); light.position.set(50,50,50); scene.add(light);
     const grid = new THREE.GridHelper(200,200); scene.add(grid);
+
+    camera.position.set(20,20,20);
+    controls.target.set(10,10,10);
+    controls.update();
 }
 function render3D(allPlacements){
+    // 保留光源和网格
     const keepObjects = scene.children.filter(obj => obj.type==='AmbientLight'||obj.type==='DirectionalLight'||obj.type==='GridHelper');
     scene.children = keepObjects;
 
@@ -162,11 +167,13 @@ function render3D(allPlacements){
 
     allPlacements.forEach(placement=>{
         const c = placement.container;
+
+        // 容器边框
         const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(c.width,c.height,c.depth)), new THREE.LineBasicMaterial({color:0x000000}));
         wire.position.set(c.width/2,c.height/2,c.depth/2); scene.add(wire);
 
         placement.items.forEach(item=>{
-            if(!item.position){ item.position={x:0,y:0,z:0}; }
+            if(!item.position) item.position={x:0,y:0,z:0};
             const geometry = new THREE.BoxGeometry(item.width,item.height,item.depth);
             const material = new THREE.MeshPhongMaterial({color:item.isDrag?0xff5555:Math.random()*0xffffff});
             const cube = new THREE.Mesh(geometry,material);
@@ -179,6 +186,7 @@ function render3D(allPlacements){
         });
     });
 
+    // 摄像机自适配
     camera.position.set(maxX*1.5 || 10, maxY*1.5 || 10, maxZ*1.5 || 10);
     controls.target.set(maxX/2 || 0, maxY/2 || 0, maxZ/2 || 0);
     controls.update();
