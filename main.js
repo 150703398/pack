@@ -166,11 +166,11 @@ function render3D(allPlacements){
         wire.position.set(c.width/2,c.height/2,c.depth/2); scene.add(wire);
 
         placement.items.forEach(item=>{
-            if(!item.position) return;
+            if(!item.position){ item.position={x:0,y:0,z:0}; }
             const geometry = new THREE.BoxGeometry(item.width,item.height,item.depth);
             const material = new THREE.MeshPhongMaterial({color:item.isDrag?0xff5555:Math.random()*0xffffff});
             const cube = new THREE.Mesh(geometry,material);
-            cube.position.set(item.position.x+item.width/2,item.position.y+item.height/2,item.position.z+item.depth/2);
+            cube.position.set(item.position.x + item.width/2, item.position.y + item.height/2, item.position.z + item.depth/2);
             scene.add(cube);
 
             maxX = Math.max(maxX, item.position.x + item.width);
@@ -179,9 +179,9 @@ function render3D(allPlacements){
         });
     });
 
-    camera.position.set(maxX*1.5, maxY*1.5, maxZ*1.5);
-    controls.target.set(maxX/2,maxY/2,maxZ/2); controls.update();
-
+    camera.position.set(maxX*1.5 || 10, maxY*1.5 || 10, maxZ*1.5 || 10);
+    controls.target.set(maxX/2 || 0, maxY/2 || 0, maxZ/2 || 0);
+    controls.update();
     renderer.render(scene,camera);
 }
 init3D();
