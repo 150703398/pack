@@ -3,50 +3,294 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>工业级装箱系统 - 完整修复版</title>
-<link rel="stylesheet" href="style.css">
+<title>工业级装箱系统</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 10px; }
+.controls { margin-bottom: 10px; }
+.controls label { margin-right: 10px; }
+.lists { display: flex; gap: 30px; margin-bottom: 10px; }
+.lists ul { list-style: none; padding: 0; max-height:200px; overflow:auto;}
+button { margin-left: 5px; }
+#utilization { margin-left: 20px; font-weight: bold; }
+#viewer { width:100%; height:600px; background:#eee; }
+</style>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/DragControls.js"></script>
 </head>
 <body>
-<h1>工业级装箱系统 - 完整修复版</h1>
+<h1>工业级装箱系统</h1>
 
 <div class="controls">
-    <label>单位:
-        <select id="unitSelect">
-            <option value="m">米 (m)</option>
-            <option value="cm">厘米 (cm)</option>
-            <option value="inch">英寸 (inch)</option>
-        </select>
-    </label>
-    <button id="addContainer">添加车厢</button>
-    <button id="addItem">添加货物</button>
-    <button id="addDrag">添加拖挂</button>
-    <label>选择车厢:
-        <select id="selectContainer"></select>
-    </label>
-    <button id="runPacking">开始装箱</button>
-    <span id="utilization"></span>
+<label>单位:
+<select id="unitSelect">
+<option value="m">米 (m)</option>
+<option value="cm">厘米 (cm)</option>
+<option value="inch">英寸 (inch)</option>
+</select>
+</label>
+
+<button id="addContainer">添加车厢</button>
+<button id="addItem">添加货物</button>
+<button id="addDrag">添加拖挂</button>
+
+<label>选择车厢:
+<select id="selectContainer"></select>
+</label>
+
+<button id="runPacking">开始装箱</button>
+<span id="utilization"></span>
 </div>
 
 <div class="lists">
-    <div class="containersList">
-        <h2>车厢列表</h2>
-        <ul id="containersUl"></ul>
-    </div>
-    <div class="itemsList">
-        <h2>货物列表</h2>
-        <ul id="itemsUl"></ul>
-    </div>
-    <div class="dragList">
-        <h2>拖挂列表</h2>
-        <ul id="dragUl"></ul>
-    </div>
+<div class="containersList">
+<h2>车厢列表</h2>
+<ul id="containersUl"></ul>
+</div>
+<div class="itemsList">
+<h2>货物列表</h2>
+<ul id="itemsUl"></ul>
+</div>
+<div class="dragList">
+<h2>拖挂列表</h2>
+<ul id="dragUl"></ul>
+</div>
 </div>
 
-<div id="viewer" style="width:100%; height:600px; background:#eee;"></div>
+<div id="viewer"></div>
 
-<script src="main.js"></script>
+<script>
+let containers=[], items=[], drags=[];
+
+// --- DOM ---
+const unitSelect = document.getElementById('unitSelect');
+const containersUl = document.getElementById('containersUl');
+const itemsUl = document.getElementById('itemsUl');
+const dragUl = document.getElementById('dragUl');
+const selectContainer = document.getElementById('selectContainer');
+const utilizationSpan = document.getElementById('utilization');
+
+// --- Worker 内嵌 ---
+const workerCode = () => {
+    function packContainer(container,items){
+        let placements=[], x=0, y=0, z=0, maxRowDepth=0;
+        items.forEach(item=>{
+            if(x+item.width>container.width){ x=0; z+=maxRowDepth; maxRowDepth=0; }
+            if(z+item.depth>container.depth){ return; }
+            placements.push({...item, position:{x,y,z}});
+            x += item.width;
+            if(item.depth>maxRowDepth) maxRowDepth=item.depth;
+        });
+        const volumeUsed = placements.reduce((s,i)=>s+i.width*i.height*i.depth,0);
+        return {placements, volumeUsed};
+    }
+    self.onmessage=function(e){
+        const {packingData} = e.data;
+        const {container, items, drags} = packingData;
+        let allPlacements=[];
+
+        drags.forEach(d=>{
+            if(!d.items) d.items=[];
+            d.items.forEach(item=>item.isDrag=true);
+            const {placements} = packContainer(d,d.items);
+            allPlacements.push({container:d, items:placements});
+        });
+
+        items.forEach(item=>item.isDrag=false);
+        const {placements} = packContainer(container, items);
+        allPlacements.push({container:container, items:placements});
+
+        const totalVolumeUsed = allPlacements.reduce((sum,pl)=>sum + pl.items.reduce((s,i)=>s+i.width*i.height*i.depth,0),0);
+        const totalContainerVolume = allPlacements.reduce((sum,pl)=>sum + pl.container.width*pl.container.height*pl.container.depth,0);
+        const utilization = totalVolumeUsed/totalContainerVolume;
+
+        self.postMessage({placements:allPlacements, utilization});
+    }
+};
+const workerBlob = new Blob(['('+workerCode.toString()+')()'],{type:'application/javascript'});
+const worker = new Worker(URL.createObjectURL(workerBlob));
+
+// --- 保存 / 加载 ---
+function saveData(){
+    localStorage.setItem('containers', JSON.stringify(containers));
+    localStorage.setItem('items', JSON.stringify(items));
+    localStorage.setItem('drags', JSON.stringify(drags));
+}
+function loadData(){
+    containers = JSON.parse(localStorage.getItem('containers') || '[]');
+    items = JSON.parse(localStorage.getItem('items') || '[]');
+    drags = JSON.parse(localStorage.getItem('drags') || '[]');
+    renderContainers(); renderItems(); renderDrags(); updateContainerSelect();
+}
+window.onload = loadData;
+
+// --- 添加车厢 ---
+document.getElementById('addContainer').onclick = ()=>{
+    const name = prompt("车厢名称","车厢X"); if(!name) return;
+    const unit = unitSelect.value;
+    const w = parseFloat(prompt(`车厢宽度 (${unit})`,"10"));
+    const h = parseFloat(prompt(`车厢高度 (${unit})`,"5"));
+    const d = parseFloat(prompt(`车厢深度 (${unit})`,"5"));
+    if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
+        const id = Date.now();
+        containers.push({id,name,width:w,height:h,depth:d,unit});
+        saveData(); renderContainers(); updateContainerSelect();
+    }
+};
+function renderContainers(){
+    containersUl.innerHTML='';
+    containers.forEach(c=>{
+        const li = document.createElement('li');
+        li.textContent = `${c.name}: W:${c.width}${c.unit} H:${c.height}${c.unit} D:${c.depth}${c.unit}`;
+        containersUl.appendChild(li);
+    });
+}
+function updateContainerSelect(){
+    selectContainer.innerHTML='';
+    containers.forEach(c=>{
+        const opt = document.createElement('option');
+        opt.value = c.id; opt.textContent = c.name;
+        selectContainer.appendChild(opt);
+    });
+}
+
+// --- 添加货物 ---
+document.getElementById('addItem').onclick = ()=>{
+    const unit = unitSelect.value;
+    const name = prompt("货物名称","货物X");
+    const w = parseFloat(prompt(`宽度 (${unit})`,"1"));
+    const h = parseFloat(prompt(`高度 (${unit})`,"1"));
+    const d = parseFloat(prompt(`深度 (${unit})`,"1"));
+    if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
+        const id = Date.now();
+        items.push({id,name,width:w,height:h,depth:d,unit});
+        saveData(); renderItems();
+    }
+};
+function renderItems(){
+    itemsUl.innerHTML='';
+    items.forEach(item=>{
+        const li = document.createElement('li');
+        const checkbox = document.createElement('input'); checkbox.type='checkbox'; checkbox.dataset.id=item.id;
+        const input = document.createElement('input'); input.type='number'; input.min=1; input.value=1; input.style.width='50px'; input.dataset.id=item.id;
+        li.appendChild(checkbox);
+        li.append(` ${item.name} W:${item.width}${item.unit} H:${item.height}${item.unit} D:${item.depth}${item.unit} 数量: `);
+        li.appendChild(input);
+        itemsUl.appendChild(li);
+    });
+}
+
+// --- 添加拖挂 ---
+document.getElementById('addDrag').onclick = ()=>{
+    const unit = unitSelect.value;
+    const name = prompt("拖挂名称","拖挂X");
+    const w = parseFloat(prompt(`宽度 (${unit})`,"2"));
+    const h = parseFloat(prompt(`高度 (${unit})`,"1"));
+    const d = parseFloat(prompt(`深度 (${unit})`,"1"));
+    if(!isNaN(w)&&!isNaN(h)&&!isNaN(d)){
+        const id = Date.now();
+        drags.push({id,name,width:w,height:h,depth:d,unit,items:[]});
+        saveData(); renderDrags();
+    }
+};
+function renderDrags(){
+    dragUl.innerHTML='';
+    drags.forEach(d=>{
+        const li = document.createElement('li');
+        const checkbox = document.createElement('input'); checkbox.type='checkbox'; checkbox.dataset.id=d.id;
+        li.appendChild(checkbox);
+        li.append(` ${d.name} W:${d.width}${d.unit} H:${d.height}${d.unit} D:${d.depth}${d.unit}`);
+        dragUl.appendChild(li);
+    });
+}
+
+// --- 开始装箱 ---
+document.getElementById('runPacking').onclick = ()=>{
+    const containerId = parseInt(selectContainer.value);
+    const selectedContainer = containers.find(c => c.id === containerId);
+    if(!selectedContainer){ alert("请选择车厢"); return; }
+
+    let selectedItems=[]; 
+    document.querySelectorAll('#itemsUl li').forEach(li=>{
+        const checkbox = li.querySelector('input[type=checkbox]');
+        const input = li.querySelector('input[type=number]');
+        if(checkbox.checked){
+            const count=parseInt(input.value); if(count>0){
+                const id=parseInt(checkbox.dataset.id); const item = items.find(i=>i.id===id);
+                for(let i=0;i<count;i++) selectedItems.push({...item});
+            }
+        }
+    });
+
+    let selectedDrags=[]; 
+    document.querySelectorAll('#dragUl li').forEach(li=>{
+        const checkbox = li.querySelector('input[type=checkbox]');
+        if(checkbox.checked){ const id=parseInt(checkbox.dataset.id); const d = drags.find(dr=>dr.id===id); selectedDrags.push({...d}); }
+    });
+
+    if(selectedItems.length===0 && selectedDrags.length===0){ alert("请选择货物或拖挂"); return; }
+
+    worker.postMessage({packingData:{container:selectedContainer, items:selectedItems, drags:selectedDrags}});
+};
+
+// --- Worker 接收消息 ---
+worker.onmessage = function(e){
+    const {placements, utilization} = e.data;
+    if(!placements || placements.length===0){ alert("装箱失败"); return; }
+    utilizationSpan.textContent = `体积利用率: ${(utilization*100).toFixed(2)}%`;
+    render3D(placements);
+};
+
+// --- Three.js ---
+let scene,camera,renderer,controls;
+function init3D(){
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75,window.innerWidth/600,0.1,10000);
+    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth,600);
+    document.getElementById('viewer').appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera,renderer.domElement);
+    controls.update();
+
+    const ambient = new THREE.AmbientLight(0xffffff,0.9); scene.add(ambient);
+    const light = new THREE.DirectionalLight(0xffffff,1); light.position.set(50,50,50); scene.add(light);
+    const grid = new THREE.GridHelper(200,200); scene.add(grid);
+
+    camera.position.set(20,20,20);
+    controls.target.set(10,10,10);
+    controls.update();
+}
+function render3D(allPlacements){
+    const keepObjects = scene.children.filter(obj => obj.type==='AmbientLight'||obj.type==='DirectionalLight'||obj.type==='GridHelper');
+    scene.children = keepObjects;
+
+    let maxX=0,maxY=0,maxZ=0;
+
+    allPlacements.forEach(placement=>{
+        const c = placement.container;
+        const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(c.width,c.height,c.depth)), new THREE.LineBasicMaterial({color:0x000000}));
+        wire.position.set(c.width/2,c.height/2,c.depth/2); scene.add(wire);
+
+        placement.items.forEach(item=>{
+            if(!item.position) item.position={x:0,y:0,z:0};
+            const geometry = new THREE.BoxGeometry(item.width,item.height,item.depth);
+            const material = new THREE.MeshPhongMaterial({color:item.isDrag?0xff5555:Math.random()*0xffffff});
+            const cube = new THREE.Mesh(geometry,material);
+            cube.position.set(item.position.x + item.width/2, item.position.y + item.height/2, item.position.z + item.depth/2);
+            scene.add(cube);
+
+            maxX = Math.max(maxX, item.position.x + item.width);
+            maxY = Math.max(maxY, item.position.y + item.height);
+            maxZ = Math.max(maxZ, item.position.z + item.depth);
+        });
+    });
+
+    camera.position.set(maxX*1.5 || 10, maxY*1.5 || 10, maxZ*1.5 || 10);
+    controls.target.set(maxX/2 || 0, maxY/2 || 0, maxZ/2 || 0);
+    controls.update();
+    renderer.render(scene,camera);
+}
+init3D();
+</script>
 </body>
 </html>
