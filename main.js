@@ -164,6 +164,7 @@ document.getElementById('runPacking').onclick = ()=>{
 // --- 接收 Worker 结果 ---
 worker.onmessage = function(e){
     const {placements, utilization} = e.data;
+    if(!placements || placements.length===0){ alert("装箱失败"); return; }
     utilizationSpan.textContent = `体积利用率: ${(utilization*100).toFixed(2)}%`;
     render3D(placements);
 };
@@ -181,7 +182,8 @@ function init3D(){
     controls = new THREE.OrbitControls(camera,renderer.domElement);
     controls.update();
 
-    scene.add(new THREE.AmbientLight(0x404040));
+    const ambient = new THREE.AmbientLight(0x404040);
+    scene.add(ambient);
     const light = new THREE.DirectionalLight(0xffffff,1);
     light.position.set(30,40,30);
     scene.add(light);
@@ -190,7 +192,9 @@ function init3D(){
     scene.add(grid);
 }
 function render3D(allPlacements){
-    scene.children = scene.children.filter(obj=>obj.type!=='Mesh');
+    const keepObjects = scene.children.filter(obj => obj.type !== 'Mesh');
+    scene.children = keepObjects;
+
     allPlacements.forEach(placement=>{
         const c = placement.container;
         const containerGeo = new THREE.BoxGeometry(c.width,c.height,c.depth);
@@ -200,6 +204,7 @@ function render3D(allPlacements){
         scene.add(wire);
 
         placement.items.forEach(item=>{
+            if(!item.position) return;
             const geometry = new THREE.BoxGeometry(item.width,item.height,item.depth);
             const material = new THREE.MeshPhongMaterial({color:item.isDrag?0xff5555:Math.random()*0xffffff});
             const cube = new THREE.Mesh(geometry,material);
