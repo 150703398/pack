@@ -3,15 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>工业级最优货物装箱系统</title>
+<title>工业级最优货物装箱系统（单位支持）</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
-<h1>工业级最优货物装箱系统</h1>
+<h1>工业级最优货物装箱系统（单位支持）</h1>
 
 <div class="controls">
+    <label>单位:
+        <select id="unitSelect">
+            <option value="m">米 (m)</option>
+            <option value="cm">厘米 (cm)</option>
+            <option value="inch">英寸 (inch)</option>
+        </select>
+    </label>
     <label>车厢尺寸 (W×H×D):
         <input id="containerWidth" type="number" value="10"> ×
         <input id="containerHeight" type="number" value="5"> ×
