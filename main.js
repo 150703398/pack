@@ -1,3 +1,4 @@
+// 数据存储
 let containers=[], items=[], drags=[];
 const unitSelect = document.getElementById('unitSelect');
 const containersUl = document.getElementById('containersUl');
@@ -8,7 +9,7 @@ const utilizationSpan = document.getElementById('utilization');
 
 let scene, camera, renderer, controls, dragControls, draggableObjects=[];
 
-// ---------- 数据持久化 ----------
+// ---------- 保存 / 加载 ----------
 function saveData(){
     localStorage.setItem('containers', JSON.stringify(containers));
     localStorage.setItem('items', JSON.stringify(items));
@@ -162,20 +163,26 @@ function animate(){
     renderer.render(scene,camera);
 }
 
-// ---------- 渲染并启用拖拽 ----------
+// ---------- 渲染物体 ----------
 function render3D(container, itemList, dragList){
     const keepObjects = scene.children.filter(obj => obj.type==='AmbientLight'||obj.type==='DirectionalLight'||obj.type==='GridHelper');
     scene.children = keepObjects;
     draggableObjects=[];
 
     // 车厢边框
-    const wire = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(container.width,container.height,container.depth)), new THREE.LineBasicMaterial({color:0x000000}));
+    const wire = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(container.width,container.height,container.depth)), 
+        new THREE.LineBasicMaterial({color:0x000000})
+    );
     wire.position.set(container.width/2,container.height/2,container.depth/2); scene.add(wire);
 
     // 拖挂
     dragList.forEach(d=>{
-        const dragMesh = new THREE.Mesh(new THREE.BoxGeometry(d.width,d.height,d.depth), new THREE.MeshPhongMaterial({color:0xff5555,transparent:true,opacity:0.5}));
-        dragMesh.position.set(0,d.height/2,0);
+        const dragMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(d.width,d.height,d.depth), 
+            new THREE.MeshPhongMaterial({color:0xff5555,transparent:true,opacity:0.5})
+        );
+        dragMesh.position.set(d.width/2,d.height/2,0);
         scene.add(dragMesh); draggableObjects.push(dragMesh);
     });
 
@@ -183,8 +190,11 @@ function render3D(container, itemList, dragList){
     let x=0,z=0,maxRowDepth=0;
     itemList.forEach(item=>{
         if(x+item.width>container.width){ x=0; z+=maxRowDepth; maxRowDepth=0; }
-        if(z+item.depth>container.depth){ x=0; z=0; } // 简单回绕
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(item.width,item.height,item.depth), new THREE.MeshPhongMaterial({color:Math.random()*0xffffff}));
+        if(z+item.depth>container.depth){ x=0; z=0; } 
+        const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(item.width,item.height,item.depth),
+            new THREE.MeshPhongMaterial({color:Math.random()*0xffffff})
+        );
         mesh.position.set(x+item.width/2,item.height/2,z+item.depth/2);
         scene.add(mesh); draggableObjects.push(mesh);
         x += item.width;
@@ -194,10 +204,10 @@ function render3D(container, itemList, dragList){
     // 拖拽控制
     if(dragControls) dragControls.deactivate();
     dragControls = new THREE.DragControls(draggableObjects,camera,renderer.domElement);
-    dragControls.addEventListener('dragstart', function(event){ controls.enabled=false; });
-    dragControls.addEventListener('dragend', function(event){ controls.enabled=true; updateUtilization(container); });
+    dragControls.addEventListener('dragstart', e=>controls.enabled=false);
+    dragControls.addEventListener('dragend', e=>{ controls.enabled=true; updateUtilization(container); });
 
-    // 摄像机自动调整
+    // 摄像机自动对准
     camera.position.set(container.width*1.5,container.height*1.5,container.depth*1.5);
     controls.target.set(container.width/2,container.height/2,container.depth/2);
     controls.update();
