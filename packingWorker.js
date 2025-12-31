@@ -1,53 +1,34 @@
-function generateRotations(item){
-    const {width,height,depth}=item;
-    return [
-        {width,height,depth},{width,depth,height},
-        {height,width,depth},{height,depth,width},
-        {depth,width,height},{depth,height,width}
-    ];
-}
-function canFit(item,space){
-    return item.width<=space.width && item.height<=space.height && item.depth<=space.depth;
-}
-
+// 简单行列装箱算法，保证可视化
 function packContainer(container,items){
-    let bestPlacements=[], bestVolume=0;
-    function recursivePlace(index,spaces,placements,volumeUsed){
-        if(index>=items.length){
-            if(volumeUsed>bestVolume){ bestVolume=volumeUsed; bestPlacements=[...placements]; }
-            return;
+    let placements = [];
+    let x=0, y=0, z=0;
+    let maxRowDepth=0;
+    items.forEach(item=>{
+        if(x+item.width>container.width){
+            x=0;
+            z += maxRowDepth;
+            maxRowDepth=0;
         }
-        const item = items[index];
-        const rotations = generateRotations(item);
-        for(let rot of rotations){
-            for(let i=0;i<spaces.length;i++){
-                const space=spaces[i];
-                if(canFit(rot,space)){
-                    const newPlacement={...rot, position:{x:space.x,y:space.y,z:space.z}, isDrag:item.isDrag||false};
-                    const newPlacements=[...placements,newPlacement];
-                    const newSpaces=spaces.slice();
-                    newSpaces.splice(i,1);
-                    newSpaces.push({x:space.x+rot.width,y:space.y,z:space.z,width:space.width-rot.width,height:rot.height,depth:rot.depth});
-                    newSpaces.push({x:space.x,y:space.y+rot.height,z:space.z,width:rot.width,height:space.height-rot.height,depth:rot.depth});
-                    newSpaces.push({x:space.x,y:space.y,z:space.z+rot.depth,width:rot.width,height:rot.height,depth:space.depth-rot.depth});
-                    recursivePlace(index+1,newSpaces,newPlacements,volumeUsed+rot.width*rot.height*rot.depth);
-                }
-            }
+        if(z+item.depth>container.depth){
+            return; // 超出容器，放不下
         }
-    }
-    recursivePlace(0,[{x:0,y:0,z:0,width:container.width,height:container.height,depth:container.depth}],[],0);
-    return {placements:bestPlacements, volumeUsed:bestVolume};
+        placements.push({...item, position:{x,y,z}});
+        x += item.width;
+        if(item.depth>maxRowDepth) maxRowDepth=item.depth;
+    });
+    const volumeUsed = placements.reduce((s,i)=>s+i.width*i.height*i.depth,0);
+    return {placements, volumeUsed};
 }
 
-self.onmessage=function(e){
-    const {packingData}=e.data;
-    const {container, items, drags}=packingData;
+self.onmessage = function(e){
+    const {packingData} = e.data;
+    const {container, items, drags} = packingData;
     let allPlacements=[];
 
-    // 先装拖挂
+    // 装拖挂
     drags.forEach(d=>{
         d.items.forEach(item=>item.isDrag=true);
-        const {placements}=packContainer(d,d.items);
+        const {placements} = packContainer(d,d.items);
         allPlacements.push({container:d, items:placements});
     });
 
