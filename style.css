@@ -1,8 +1,7 @@
 body { font-family: Arial, sans-serif; margin: 10px; }
 .controls { margin-bottom: 10px; }
 .controls label { margin-right: 10px; }
-.itemsList { margin-bottom: 10px; }
-.itemsList ul { list-style: none; padding: 0; }
-.itemsList li { margin: 2px 0; }
+.lists { display: flex; gap: 30px; margin-bottom: 10px; }
+.lists ul { list-style: none; padding: 0; }
 button { margin-left: 5px; }
 #utilization { margin-left: 20px; font-weight: bold; }
