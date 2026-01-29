@@ -1,4 +1,4 @@
-body { margin:0; font-family:Arial }
+body { margin:0; font-family:Arial; }
 #panel {
   width:400px;
   position:fixed;
@@ -12,4 +12,4 @@ body { margin:0; font-family:Arial }
   left:400px; right:0; top:0; bottom:0;
 }
 table { width:100%; font-size:12px; }
-input { width:60px }
+input { width:60px; }
