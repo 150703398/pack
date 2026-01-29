@@ -2,12 +2,11 @@ from fastapi import FastAPI
 from models import PackRequest
 from packer import pack
 
-app = FastAPI(title="Packing Engine")
+app = FastAPI(title="Container Packing Engine")
 
 @app.post("/pack")
 def pack_api(req: PackRequest):
-    placements = pack(req.container, req.cargos)
     return {
         "container": req.container,
-        "placements": placements
+        "placements": pack(req.container, req.cargos)
     }
