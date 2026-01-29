@@ -1,12 +1,8 @@
 def pack(container, cargos):
-    # 工业排序规则
+    # 工业规则排序：重的先 -> 非易碎 -> 可堆叠
     cargos = sorted(
         cargos,
-        key=lambda c: (
-            -c.weight,       # 重的先
-            c.fragile,       # 易碎靠后
-            -int(c.stackable)
-        )
+        key=lambda c: (-c.weight, c.fragile, -int(c.stackable))
     )
 
     placements = []
@@ -18,12 +14,10 @@ def pack(container, cargos):
             x = 0
             z += c.width
             layer_height = 0
-
         if z + c.width > container.width:
             z = 0
             y += layer_height
             layer_height = 0
-
         if y + c.height > container.height:
             continue
 
