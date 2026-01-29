@@ -1,13 +1,13 @@
 from fastapi import FastAPI
-from packing.models import PackingRequest, PackingResult
-from packing.engine import pack
+from models import PackRequest
+from packer import pack
 
-app = FastAPI(title="3D Packing Engine")
+app = FastAPI(title="Packing Engine")
 
-@app.post("/pack", response_model=PackingResult)
-def pack_api(req: PackingRequest):
-    packed, unplaced = pack(req.container, req.cargos)
+@app.post("/pack")
+def pack_api(req: PackRequest):
+    placements = pack(req.container, req.cargos)
     return {
-        "packed": packed,
-        "unplaced": unplaced
+        "container": req.container,
+        "placements": placements
     }
