@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>3D 装箱系统</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+<div id="panel">
+<h3>货柜（cm）</h3>
+<input id="cl" value="1200">
+<input id="cw" value="235">
+<input id="ch" value="260">
+
+<h3>货物清单</h3>
+<table id="table"></table>
+<button onclick="add()">➕ 添加</button>
+<button onclick="run()">▶ 装箱</button>
+</div>
+<div id="view"></div>
+<script src="app.js"></script>
+</body>
+</html>
