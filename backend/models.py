@@ -9,7 +9,7 @@ class Cargo(BaseModel):
     weight: float   # kg
     fragile: bool = False
     stackable: bool = True
-    max_load: float = 999999  # kg
+    max_load: float = 1e9
 
 class Container(BaseModel):
     length: float
