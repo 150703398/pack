@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>工业级 3D 装箱系统（终版）</title>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+
+<style>
+body{margin:0;font-family:Arial;background:#f2f4f7;}
+#panel{
+  position:absolute;left:10px;top:10px;width:300px;
+  background:#fff;padding:12px;border-radius:8px;
+  box-shadow:0 0 10px rgba(0,0,0,.2);
+}
+input,textarea,button{width:100%;margin:4px 0;padding:6px;}
+textarea{height:90px;font-size:12px;}
+#views{position:absolute;right:10px;bottom:10px;display:flex;gap:10px;}
+canvas{background:#fff;border:1px solid #ccc;}
+</style>
+</head>
+
+<body>
+
+<div id="panel">
+<b>货柜尺寸 (mm)</b>
+<input id="cL" value="6000">
+<input id="cW" value="2400">
+<input id="cH" value="2600">
+
+<b>货物清单（JSON）</b>
+<textarea id="items">
+[
+  {"id":"A","l":1200,"w":800,"h":600,"qty":6},
+  {"id":"B","l":1000,"w":1000,"h":500,"qty":4}
+]
+</textarea>
+
+<button onclick="run()">生成装箱方案</button>
+<button onclick="exportPNG()">导出 PNG</button>
+</div>
+
+<div id="views">
+  <canvas id="top" width="320" height="220"></canvas>
+  <canvas id="side" width="320" height="220"></canvas>
+</div>
+
+<script>
+// ====================== Three.js 初始化 ======================
+let scene=new THREE.Scene();
+scene.background=new THREE.Color(0xf0f0f0);
+
+let camera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,1,100000);
+camera.position.set(8000,5000,8000);
+
+let renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+let controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;
+
+scene.add(new THREE.AmbientLight(0xffffff,0.8));
+let light=new THREE.DirectionalLight(0xffffff,0.6);
+light.position.set(1,2,3);
+scene.add(light);
+
+// ====================== MFS 算法 ======================
+class Space{
+  constructor(x,y,z,l,w,h){Object.assign(this,{x,y,z,l,w,h});}
+}
+
+function split(space,p){
+  return [
+    new Space(space.x+p.l,space.y,space.z,space.l-p.l,space.w,space.h),
+    new Space(space.x,space.y,space.z+p.w,p.l,space.w-p.w,space.h),
+    new Space(space.x,space.y+p.h,space.z,p.l,p.w,space.h-p.h)
+  ].filter(s=>s.l>0&&s.w>0&&s.h>0);
+}
+
+function pack(container,items){
+  let spaces=[new Space(0,0,0,container.l,container.w,container.h)];
+  let placements=[];
+
+  let expanded=[];
+  items.forEach(it=>{for(let i=0;i<it.qty;i++)expanded.push(it);});
+  expanded.sort((a,b)=>(b.l*b.w*b.h)-(a.l*a.w*a.h));
+
+  expanded.forEach((it,index)=>{
+    for(let i=0;i<spaces.length;i++){
+      let s=spaces[i];
+      if(it.l<=s.l&&it.w<=s.w&&it.h<=s.h){
+        let p={...it,x:s.x,y:s.y,z:s.z,order:index+1};
+        placements.push(p);
+        spaces.splice(i,1);
+        spaces.push(...split(s,p));
+        break;
+      }
+    }
+  });
+  return placements;
+}
+
+// ====================== 主执行 ======================
+function clearScene(){
+  scene.children=scene.children.filter(o=>o.type.includes("Light"));
+}
+
+function run(){
+  clearScene();
+  const c={l:+cL.value,w:+cW.value,h:+cH.value};
+  const items=JSON.parse(items.value);
+
+  let cont=new THREE.Mesh(
+    new THREE.BoxGeometry(c.l,c.h,c.w),
+    new THREE.MeshBasicMaterial({wireframe:true,transparent:true,opacity:0.25})
+  );
+  cont.position.y=c.h/2;
+  scene.add(cont);
+
+  const ps=pack(c,items);
+  draw3D(ps,c);
+  draw2D(ps,c);
+}
+
+function draw3D(ps,c){
+  ps.forEach(p=>{
+    let color=new THREE.Color(`hsl(${p.order*35},70%,60%)`);
+    let box=new THREE.Mesh(
+      new THREE.BoxGeometry(p.l,p.h,p.w),
+      new THREE.MeshStandardMaterial({color})
+    );
+    box.position.set(
+      -c.l/2+p.x+p.l/2,
+      p.y+p.h/2,
+      -c.w/2+p.z+p.w/2
+    );
+    scene.add(box);
+  });
+}
+
+function draw2D(ps,c){
+  const top=document.getElementById("top").getContext("2d");
+  const side=document.getElementById("side").getContext("2d");
+  top.clearRect(0,0,320,220);
+  side.clearRect(0,0,320,220);
+
+  const sx=320/c.l,sy=220/c.w,sy2=220/c.h;
+  top.strokeRect(0,0,320,220);
+  side.strokeRect(0,0,320,220);
+
+  ps.forEach(p=>{
+    top.fillStyle=`hsl(${p.order*35},70%,60%)`;
+    top.fillRect(p.x*sx,p.z*sy,p.l*sx,p.w*sy);
+    top.fillStyle="#000";
+    top.fillText(p.order,p.x*sx+4,p.z*sy+14);
+
+    side.fillStyle=`hsl(${p.order*35},70%,60%)`;
+    side.fillRect(p.x*sx,(c.h-p.y-p.h)*sy2,p.l*sx,p.h*sy2);
+    side.fillStyle="#000";
+    side.fillText(p.order,p.x*sx+4,(c.h-p.y-p.h)*sy2+14);
+  });
+}
+
+// ====================== 导出 PNG ======================
+function exportPNG(){
+  const link=document.createElement("a");
+  link.download="packing_result.png";
+  link.href=renderer.domElement.toDataURL("image/png");
+  link.click();
+}
+
+// ====================== 动画 ======================
+(function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene,camera);
+})();
+</script>
+</body>
+</html>
