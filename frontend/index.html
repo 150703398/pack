@@ -2,9 +2,10 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>3D 工业级装箱（表格版）</title>
+<title>3D 装箱 + 可编辑表格</title>
 <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
 body { margin:0; font-family:Arial; }
 #panel {
@@ -20,12 +21,11 @@ body { margin:0; font-family:Arial; }
   left:420px; right:0; top:0; bottom:0;
 }
 table { width:100%; border-collapse: collapse; font-size:12px; margin-bottom:8px;}
-th, td { border:1px solid #ccc; padding:4px; text-align:center; }
-input { width:60px; }
-button { width:100%; margin:4px 0; padding:6px; }
+th, td { border:1px solid #ccc; padding:4px; text-align:center; cursor:pointer;}
+input { width:60px; border:none; text-align:center; }
+button { width:100%; margin:4px 0; padding:6px; cursor:pointer;}
 </style>
 </head>
-
 <body>
 <div id="panel">
 <h3>货柜尺寸 (cm)</h3>
@@ -47,18 +47,18 @@ button { width:100%; margin:4px 0; padding:6px; }
 
 <script>
 let scene, camera, renderer, controls
+const table = document.getElementById("goodsTable")
 
-// 添加一行货物
+// 添加行
 function addRow(l=100,w=80,h=60,weight=50,fragile=false,stackable=true){
-  const table = document.getElementById("goodsTable")
   const row = document.createElement("tr")
   const idx = table.rows.length
   row.innerHTML = `
     <td>${idx}</td>
-    <td><input value="${l}"></td>
-    <td><input value="${w}"></td>
-    <td><input value="${h}"></td>
-    <td><input value="${weight}"></td>
+    <td contenteditable>${l}</td>
+    <td contenteditable>${w}</td>
+    <td contenteditable>${h}</td>
+    <td contenteditable>${weight}</td>
     <td><input type="checkbox" ${fragile?"checked":""}></td>
     <td><input type="checkbox" ${stackable?"checked":""}></td>
     <td><button onclick="removeRow(this)">删除</button></td>
@@ -66,19 +66,20 @@ function addRow(l=100,w=80,h=60,weight=50,fragile=false,stackable=true){
   table.appendChild(row)
 }
 
-// 删除一行
+// 删除行
 function removeRow(btn){
   btn.closest("tr").remove()
-  // 重新编号
-  const table = document.getElementById("goodsTable")
   for(let i=1;i<table.rows.length;i++){
     table.rows[i].cells[0].innerText=i
   }
 }
 
-// 初始化两行示例
+// 初始化示例
 addRow()
 addRow(120,100,80,120,true,false)
+
+// 行拖拽
+Sortable.create(table, {animation:150, ghostClass:"sortable-ghost", handle:"td"})
 
 // 初始化 Three.js
 function init3D(){
@@ -109,7 +110,7 @@ function animate(){
   renderer.render(scene,camera)
 }
 
-// 工业规则简单装箱
+// 装箱算法（工业规则）
 function pack(){
   init3D()
   const CL = +document.getElementById("cl").value
@@ -117,17 +118,17 @@ function pack(){
   const CH = +document.getElementById("ch").value
 
   const cargos=[]
-  const table = document.getElementById("goodsTable")
   for(let i=1;i<table.rows.length;i++){
-    const c = table.rows[i].querySelectorAll("input")
+    const row = table.rows[i]
+    const cells = row.querySelectorAll("td")
     cargos.push({
       id:"C"+i,
-      length:+c[0].value,
-      width:+c[1].value,
-      height:+c[2].value,
-      weight:+c[3].value,
-      fragile:c[4].checked,
-      stackable:c[5].checked
+      length:+cells[1].innerText,
+      width:+cells[2].innerText,
+      height:+cells[3].innerText,
+      weight:+cells[4].innerText,
+      fragile:cells[5].querySelector("input").checked,
+      stackable:cells[6].querySelector("input").checked
     })
   }
 
@@ -140,7 +141,7 @@ function pack(){
 
   let x=0,y=0,z=0,rowH=0
 
-  // 绘制集装箱
+  // 集装箱
   const boxGeo = new THREE.BoxGeometry(CL,CH,CW)
   const boxMat = new THREE.MeshBasicMaterial({color:0x333333,wireframe:true})
   const container = new THREE.Mesh(boxGeo,boxMat)
