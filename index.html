@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<title>工业级 3D 装箱系统（终版）</title>
+<title>工业级装箱系统（承重 / 易碎 / 堆叠规则）</title>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
@@ -10,12 +10,12 @@
 <style>
 body{margin:0;font-family:Arial;background:#f2f4f7;}
 #panel{
-  position:absolute;left:10px;top:10px;width:300px;
+  position:absolute;left:10px;top:10px;width:340px;
   background:#fff;padding:12px;border-radius:8px;
   box-shadow:0 0 10px rgba(0,0,0,.2);
 }
 input,textarea,button{width:100%;margin:4px 0;padding:6px;}
-textarea{height:90px;font-size:12px;}
+textarea{height:130px;font-size:12px;}
 #views{position:absolute;right:10px;bottom:10px;display:flex;gap:10px;}
 canvas{background:#fff;border:1px solid #ccc;}
 </style>
@@ -24,16 +24,16 @@ canvas{background:#fff;border:1px solid #ccc;}
 <body>
 
 <div id="panel">
-<b>货柜尺寸 (mm)</b>
-<input id="cL" value="6000">
-<input id="cW" value="2400">
-<input id="cH" value="2600">
+<b>货柜尺寸（cm）</b>
+<input id="cL" value="600">
+<input id="cW" value="240">
+<input id="cH" value="260">
 
-<b>货物清单（JSON）</b>
+<b>货物清单（cm / kg）</b>
 <textarea id="items">
 [
-  {"id":"A","l":1200,"w":800,"h":600,"qty":6},
-  {"id":"B","l":1000,"w":1000,"h":500,"qty":4}
+  {"id":"A","l":120,"w":80,"h":60,"weight":500,"qty":6,"fragile":false,"maxStack":3},
+  {"id":"B","l":100,"w":100,"h":50,"weight":300,"qty":4,"fragile":true,"maxStack":1}
 ]
 </textarea>
 
@@ -47,12 +47,12 @@ canvas{background:#fff;border:1px solid #ccc;}
 </div>
 
 <script>
-// ====================== Three.js 初始化 ======================
+// ===================== Three.js 初始化 =====================
 let scene=new THREE.Scene();
 scene.background=new THREE.Color(0xf0f0f0);
 
 let camera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,1,100000);
-camera.position.set(8000,5000,8000);
+camera.position.set(800,500,800);
 
 let renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
 renderer.setSize(window.innerWidth,window.innerHeight);
@@ -66,11 +66,19 @@ let light=new THREE.DirectionalLight(0xffffff,0.6);
 light.position.set(1,2,3);
 scene.add(light);
 
-// ====================== MFS 算法 ======================
+// ===================== 装箱数据结构 =====================
 class Space{
   constructor(x,y,z,l,w,h){Object.assign(this,{x,y,z,l,w,h});}
 }
 
+// ===================== 工业规则校验 =====================
+function canStack(base, item){
+  if(base.fragile) return false;
+  if(base.stackCount >= base.maxStack) return false;
+  return true;
+}
+
+// ===================== MFS 切割 =====================
 function split(space,p){
   return [
     new Space(space.x+p.l,space.y,space.z,space.l-p.l,space.w,space.h),
@@ -79,30 +87,50 @@ function split(space,p){
   ].filter(s=>s.l>0&&s.w>0&&s.h>0);
 }
 
+// ===================== 核心装箱引擎 =====================
 function pack(container,items){
   let spaces=[new Space(0,0,0,container.l,container.w,container.h)];
   let placements=[];
-
   let expanded=[];
-  items.forEach(it=>{for(let i=0;i<it.qty;i++)expanded.push(it);});
+
+  items.forEach(it=>{
+    for(let i=0;i<it.qty;i++){
+      expanded.push({...it,stackCount:1});
+    }
+  });
+
   expanded.sort((a,b)=>(b.l*b.w*b.h)-(a.l*a.w*a.h));
 
-  expanded.forEach((it,index)=>{
+  expanded.forEach((it,order)=>{
     for(let i=0;i<spaces.length;i++){
       let s=spaces[i];
-      if(it.l<=s.l&&it.w<=s.w&&it.h<=s.h){
-        let p={...it,x:s.x,y:s.y,z:s.z,order:index+1};
+
+      if(it.l<=s.l && it.w<=s.w && it.h<=s.h){
+        // 找是否在已有货物上
+        let base=placements.find(p=>
+          p.x===s.x &&
+          p.z===s.z &&
+          p.y+p.h===s.y
+        );
+
+        if(base && !canStack(base,it)) continue;
+
+        let p={...it,x:s.x,y:s.y,z:s.z,order:order+1};
         placements.push(p);
+
+        if(base) base.stackCount++;
+
         spaces.splice(i,1);
         spaces.push(...split(s,p));
         break;
       }
     }
   });
+
   return placements;
 }
 
-// ====================== 主执行 ======================
+// ===================== 绘制 =====================
 function clearScene(){
   scene.children=scene.children.filter(o=>o.type.includes("Light"));
 }
@@ -110,7 +138,7 @@ function clearScene(){
 function run(){
   clearScene();
   const c={l:+cL.value,w:+cW.value,h:+cH.value};
-  const items=JSON.parse(items.value);
+  const items=JSON.parse(document.getElementById("items").value);
 
   let cont=new THREE.Mesh(
     new THREE.BoxGeometry(c.l,c.h,c.w),
@@ -126,7 +154,7 @@ function run(){
 
 function draw3D(ps,c){
   ps.forEach(p=>{
-    let color=new THREE.Color(`hsl(${p.order*35},70%,60%)`);
+    let color=p.fragile?0xff5555:new THREE.Color(`hsl(${p.order*40},70%,60%)`);
     let box=new THREE.Mesh(
       new THREE.BoxGeometry(p.l,p.h,p.w),
       new THREE.MeshStandardMaterial({color})
@@ -151,27 +179,27 @@ function draw2D(ps,c){
   side.strokeRect(0,0,320,220);
 
   ps.forEach(p=>{
-    top.fillStyle=`hsl(${p.order*35},70%,60%)`;
+    top.fillStyle=p.fragile?"#ff9999":`hsl(${p.order*40},70%,60%)`;
     top.fillRect(p.x*sx,p.z*sy,p.l*sx,p.w*sy);
     top.fillStyle="#000";
     top.fillText(p.order,p.x*sx+4,p.z*sy+14);
 
-    side.fillStyle=`hsl(${p.order*35},70%,60%)`;
+    side.fillStyle=top.fillStyle;
     side.fillRect(p.x*sx,(c.h-p.y-p.h)*sy2,p.l*sx,p.h*sy2);
     side.fillStyle="#000";
     side.fillText(p.order,p.x*sx+4,(c.h-p.y-p.h)*sy2+14);
   });
 }
 
-// ====================== 导出 PNG ======================
+// ===================== 导出 =====================
 function exportPNG(){
   const link=document.createElement("a");
-  link.download="packing_result.png";
+  link.download="industrial_packing.png";
   link.href=renderer.domElement.toDataURL("image/png");
   link.click();
 }
 
-// ====================== 动画 ======================
+// ===================== 动画 =====================
 (function animate(){
   requestAnimationFrame(animate);
   controls.update();
