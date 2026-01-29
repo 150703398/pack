@@ -3,14 +3,13 @@ def pack(container, cargos):
     cargos = sorted(
         cargos,
         key=lambda c: (
-            -c.weight,
-            c.fragile,
+            -c.weight,       # 重的先
+            c.fragile,       # 易碎靠后
             -int(c.stackable)
         )
     )
 
     placements = []
-
     x = y = z = 0
     layer_height = 0
 
