@@ -2,29 +2,11 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>3D 装箱 + 可编辑表格</title>
+<title>3D 装箱系统</title>
+<link rel="stylesheet" href="style.css">
 <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<style>
-body { margin:0; font-family:Arial; }
-#panel {
-  width:420px;
-  position:fixed;
-  left:0; top:0; bottom:0;
-  background:#fff;
-  overflow:auto;
-  padding:10px;
-}
-#view {
-  position:fixed;
-  left:420px; right:0; top:0; bottom:0;
-}
-table { width:100%; border-collapse: collapse; font-size:12px; margin-bottom:8px;}
-th, td { border:1px solid #ccc; padding:4px; text-align:center; cursor:pointer;}
-input { width:60px; border:none; text-align:center; }
-button { width:100%; margin:4px 0; padding:6px; cursor:pointer;}
-</style>
 </head>
 <body>
 <div id="panel">
@@ -42,14 +24,12 @@ button { width:100%; margin:4px 0; padding:6px; cursor:pointer;}
 <button onclick="addRow()">➕ 添加货物</button>
 <button onclick="pack()">▶ 装箱</button>
 </div>
-
 <div id="view"></div>
 
 <script>
-let scene, camera, renderer, controls
+const API = "https://packing-proxy.xxx.workers.dev"
 const table = document.getElementById("goodsTable")
 
-// 添加行
 function addRow(l=100,w=80,h=60,weight=50,fragile=false,stackable=true){
   const row = document.createElement("tr")
   const idx = table.rows.length
@@ -66,7 +46,6 @@ function addRow(l=100,w=80,h=60,weight=50,fragile=false,stackable=true){
   table.appendChild(row)
 }
 
-// 删除行
 function removeRow(btn){
   btn.closest("tr").remove()
   for(let i=1;i<table.rows.length;i++){
@@ -77,30 +56,25 @@ function removeRow(btn){
 // 初始化示例
 addRow()
 addRow(120,100,80,120,true,false)
-
-// 行拖拽
 Sortable.create(table, {animation:150, ghostClass:"sortable-ghost", handle:"td"})
 
-// 初始化 Three.js
+let scene,camera,renderer,controls
+
 function init3D(){
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0xf0f0f0)
-
   camera = new THREE.PerspectiveCamera(60,(window.innerWidth-420)/window.innerHeight,1,5000)
   camera.position.set(800,500,800)
-
   renderer = new THREE.WebGLRenderer({antialias:true})
-  renderer.setSize(window.innerWidth-420, window.innerHeight)
-  const viewDiv = document.getElementById("view")
+  renderer.setSize(window.innerWidth-420,window.innerHeight)
+  const viewDiv=document.getElementById("view")
   viewDiv.innerHTML=""
   viewDiv.appendChild(renderer.domElement)
-
-  controls = new THREE.OrbitControls(camera, renderer.domElement)
-  scene.add(new THREE.AmbientLight(0xffffff,0.8))
-  const light = new THREE.DirectionalLight(0xffffff,0.6)
+  controls = new THREE.OrbitControls(camera,renderer.domElement)
+  scene.add(new THREE.AmbientLight(0xffffff,.8))
+  const light = new THREE.DirectionalLight(0xffffff,.6)
   light.position.set(500,500,500)
   scene.add(light)
-
   animate()
 }
 
@@ -110,17 +84,14 @@ function animate(){
   renderer.render(scene,camera)
 }
 
-// 装箱算法（工业规则）
+// 装箱调用 Worker + FastAPI
 function pack(){
-  init3D()
-  const CL = +document.getElementById("cl").value
-  const CW = +document.getElementById("cw").value
-  const CH = +document.getElementById("ch").value
-
+  const CL=+document.getElementById("cl").value
+  const CW=+document.getElementById("cw").value
+  const CH=+document.getElementById("ch").value
   const cargos=[]
   for(let i=1;i<table.rows.length;i++){
-    const row = table.rows[i]
-    const cells = row.querySelectorAll("td")
+    const cells=table.rows[i].querySelectorAll("td")
     cargos.push({
       id:"C"+i,
       length:+cells[1].innerText,
@@ -131,36 +102,29 @@ function pack(){
       stackable:cells[6].querySelector("input").checked
     })
   }
+  fetch(API,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({container:{length:CL,width:CW,height:CH},cargos})
+  }).then(r=>r.json()).then(draw)
+}
 
-  // 工业规则排序
-  cargos.sort((a,b)=>{
-    if(b.weight!=a.weight) return b.weight-a.weight
-    if(a.fragile!=b.fragile) return a.fragile?-1:1
-    return b.stackable-a.stackable
-  })
-
-  let x=0,y=0,z=0,rowH=0
-
-  // 集装箱
-  const boxGeo = new THREE.BoxGeometry(CL,CH,CW)
-  const boxMat = new THREE.MeshBasicMaterial({color:0x333333,wireframe:true})
-  const container = new THREE.Mesh(boxGeo,boxMat)
+function draw(data){
+  init3D()
+  const CL=data.container.length
+  const CW=data.container.width
+  const CH=data.container.height
+  const containerGeo=new THREE.BoxGeometry(CL,CH,CW)
+  const containerMat=new THREE.MeshBasicMaterial({color:0x333333,wireframe:true})
+  const container=new THREE.Mesh(containerGeo,containerMat)
   container.position.set(CL/2,CH/2,CW/2)
   scene.add(container)
-
-  cargos.forEach(g=>{
-    if(x+g.length>CL){ x=0; z+=g.width; rowH=0 }
-    if(z+g.width>CW){ z=0; y+=rowH; rowH=0 }
-    if(y+g.height>CH) return
-
-    const geo = new THREE.BoxGeometry(g.length,g.height,g.width)
-    const mat = new THREE.MeshLambertMaterial({color:g.fragile?0xff5555:0x55aaff})
-    const mesh = new THREE.Mesh(geo,mat)
-    mesh.position.set(x+g.length/2, y+g.height/2, z+g.width/2)
+  data.placements.forEach(p=>{
+    const geo=new THREE.BoxGeometry(p.length,p.height,p.width)
+    const mat=new THREE.MeshLambertMaterial({color:p.fragile?0xff5555:0x55aaff})
+    const mesh=new THREE.Mesh(geo,mat)
+    mesh.position.set(p.x+p.length/2,p.y+p.height/2,p.z+p.width/2)
     scene.add(mesh)
-
-    x+=g.length
-    rowH=Math.max(rowH,g.height)
   })
 }
 </script>
